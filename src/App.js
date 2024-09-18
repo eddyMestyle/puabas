@@ -42,7 +42,7 @@ const App = () => {
   const [totalBonus, setTotalBonus] = useState(0);
   const [userProfile, setUserProfile] = useState(null);
   const [isAnimating, setIsAnimating] = useState(false);
-  const [error, setError] = useState('');
+  // const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(true); // Loading state during fetch
 
   const storeUserProfile = async (profile) => {
@@ -251,9 +251,7 @@ useEffect(() => {
       if (!liff.isLoggedIn()) {
         liff.login();
       } else {
-        // เพิ่ม delay 1.5 วินาทีหลังจาก LIFF init สำเร็จ
-        await fetchUserProfile(); // เช็ค/บันทึกข้อมูลผู้ใช้
-
+        await fetchUserProfile(); // เรียกใช้งานฟังก์ชัน fetchUserProfile
       }
     } catch (err) {
       console.error('LIFF Initialization failed', err);
@@ -263,7 +261,9 @@ useEffect(() => {
   };
 
   initializeLiff();
-}, []);
+}, [fetchUserProfile]);  // เพิ่ม fetchUserProfile ใน array ของ useEffect
+
+
 
 
   return (
