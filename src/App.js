@@ -42,7 +42,7 @@ const App = () => {
   const [totalBonus, setTotalBonus] = useState(0);
   const [userProfile, setUserProfile] = useState(null);
   const [isAnimating, setIsAnimating] = useState(false);
-  // const [error, setError] = useState('');
+  const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(true); // Loading state during fetch
 
   const storeUserProfile = async (profile) => {
