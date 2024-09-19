@@ -150,7 +150,6 @@ const fetchUserProfile = async () => {
 };
 
   
-  // ฟังก์ชันสุ่มคะแนน (Handle randomization)
 // ฟังก์ชันสำหรับบันทึกคะแนนลงใน Data Collection "Score" และลดจำนวนสิทธิ์
 const handleRandomize = async () => {
   if (!isAnimating && remainingChances > 0) {
@@ -160,7 +159,7 @@ const handleRandomize = async () => {
 
     try {
       // บันทึกคะแนนลงใน Data Collection "Score"
-      await axios.post(`${proxyUrl}/score`, {
+      const scoreResponse = await axios.post(`${proxyUrl}/score`, {
         line_user_id: userProfile.userId,
         score_value: randomScore,
         redemption_status: "pending", // ตั้งค่าเริ่มต้นเป็น pending
@@ -184,6 +183,7 @@ const handleRandomize = async () => {
     }
   }
 };
+
 
 // ฟังก์ชันเคลมโบนัส (Handle bonus claim)
 const handleClaimBonus = () => {
