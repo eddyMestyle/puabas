@@ -57,12 +57,99 @@ const App = () => {
         random_draws_available: 5, // ค่าเริ่มต้น
         total_bonus: 0 // ค่าเริ่มต้น
       });
-      console.log('User profile stored successfully:', response.data);
+      console.log('User profile stored successfully:', response.data.data);
     } catch (err) {
       console.error('Error storing user profile:', err);
     }
   };
 
+
+  
+  // ฟังก์ชันเพิ่มสิทธิ์ในการสุ่ม (Handle add chances)
+  const handleAddChances = () => {
+    setRemainingChances(remainingChances + 1); // เพิ่มสิทธิ์ในการสุ่ม
+  };
+
+  
+// ฟังก์ชันดึงข้อมูลสิทธิ์ในการสุ่มจาก Random Draws Available
+const fetchRemainingDraws = async (lineUserId) => {
+  try {
+    // ทำการร้องขอข้อมูลจาก API
+    const response = await axios.post(`${proxyUrl}/eddy2?filter[line_user_id][_eq]=${lineUserId}`);
+    
+    // พิมพ์ข้อมูลทั้งหมดเพื่อดูโครงสร้างก่อน
+    console.log('Full Response:', response.data);
+    
+    // ตรวจสอบว่ามีข้อมูลใน response.data และ response.data.data หรือไม่
+    if (response.data ) {
+      console.log('จำนวนสิทธิ์ :', response.data.remaining_draws);
+      console.log('คะแนนรวม :', response.data.total_bonus);
+
+      // ใช้ Random Draws Available แทน Draw Status
+            setRemainingChances(response.data.remaining_draws || 99); // ดึง Random Draws Available
+      await setTotalBonus(response.data.total_bonus ); // ดึงคะแนนสะสมทั้งหมด
+    } else {
+      console.error('No data found for user');
+    }
+  } catch (err) {
+    console.error('Error fetching draw status:', err);
+  }
+};
+
+
+const checkUserExists = async (lineUserId) => {
+  try {
+    const response = await axios.post(`${proxyUrl}/eddy2?filter[line_user_id][_eq]=${lineUserId}`);
+    // ตรวจสอบว่า response.data มีค่าหรือไม่และเป็นผู้ใช้ที่ตรงกัน
+    if (response.data.data && response.data.data.length > 0) {
+      console.log('User exists:', response.data.data);
+      return true;
+    } else {
+      return false;
+    }
+  } catch (err) {
+    console.error('Error checking user existence:', err);
+    return false;
+  }
+};
+
+const fetchUserProfile = async () => {
+  try {
+    const profile = await liff.getProfile();
+    const idToken = liff.getDecodedIDToken();
+    setUserProfile(profile);
+
+    // พิมพ์ข้อมูลที่ดึงได้เพื่อตรวจสอบ
+    console.log('User Profile:', profile);
+    console.log('ID Token:', idToken);
+
+    // ดึง email จาก idToken
+    const userEmail = idToken.email;
+    console.log('User Email:', userEmail);
+
+    // เช็คว่ามีผู้ใช้ในระบบหรือไม่
+    const userExists = await checkUserExists(profile.userId);
+    if (!userExists) {
+      console.log('User does not exist, creating new user');
+      await storeUserProfile(profile,userEmail); // บันทึกผู้ใช้ใหม่เฉพาะเมื่อไม่พบผู้ใช้เดิม
+    } else {
+      console.log('User already exists, not creating a new user');
+    }
+
+    // หลังจากนั้นดึงข้อมูลสิทธิ์ในการสุ่มจาก Random Draws Available
+    await fetchRemainingDraws(profile.userId);
+ 
+    
+    // อัปเดตสถานะ isLoading หลังจากดึงข้อมูลเสร็จสิ้น
+    setIsLoading(false);
+  } catch (err) {
+    console.error('Error fetching user profile:', err);
+    // ตั้ง isLoading เป็น false ในกรณีที่เกิดข้อผิดพลาด
+    setIsLoading(false);
+  }
+};
+
+  
   // ฟังก์ชันสุ่มคะแนน (Handle randomization)
 // ฟังก์ชันสำหรับบันทึกคะแนนลงใน Data Collection "Score" และลดจำนวนสิทธิ์
 const handleRandomize = async () => {
@@ -98,91 +185,12 @@ const handleRandomize = async () => {
   }
 };
 
-
-  // ฟังก์ชันเคลมโบนัส (Handle bonus claim)
-  const handleClaimBonus = () => {
-    setTotalBonus(0); // รีเซ็ต totalBonus หลังจากเคลมแล้ว
-    alert(`คุณเคลมคะแนนโบนัสทั้งหมด ${totalBonus} Points`);
-  };
-
-  // ฟังก์ชันเพิ่มสิทธิ์ในการสุ่ม (Handle add chances)
-  const handleAddChances = () => {
-    setRemainingChances(remainingChances + 1); // เพิ่มสิทธิ์ในการสุ่ม
-  };
-
-  
-// ฟังก์ชันดึงข้อมูลสิทธิ์ในการสุ่มจาก Random Draws Available
-const fetchRemainingDraws = async (lineUserId) => {
-  try {
-    const response = await axios.post(`${proxyUrl}/items/user/?filter[line_user_id][_eq]=${lineUserId}`);
-    console.log('Line User ID:', lineUserId);
-    console.log('จำนวนสิทธิ์ :', response.data);
-
-    if (response.data) {
-      // ใช้ Random Draws Available แทน Draw Status
-      setRemainingChances(response.data.random_draws_available || 99); // ดึง Random Draws Available
-      setTotalBonus(response.data.total_bonus || 11); // ดึงคะแนนสะสมทั้งหมด
-    } else {
-      console.error('No data found for user');
-    }
-  } catch (err) {
-    console.error('Error fetching draw status:', err);
-  }
+// ฟังก์ชันเคลมโบนัส (Handle bonus claim)
+const handleClaimBonus = () => {
+  setTotalBonus(0); // รีเซ็ต totalBonus หลังจากเคลมแล้ว
+  alert(`คุณเคลมคะแนนโบนัสทั้งหมด ${totalBonus} Points`);
 };
 
-
-const checkUserExists = async (lineUserId) => {
-  try {
-    const response = await axios.post(`${proxyUrl}/items/user?filter[line_user_id][_eq]=${lineUserId}`);
-    // ตรวจสอบว่า response.data มีค่าหรือไม่และเป็นผู้ใช้ที่ตรงกัน
-    if (response.data.data && response.data.data.length > 0) {
-      console.log('User exists:', response.data.data);
-      return true;
-    } else {
-      return false;
-    }
-  } catch (err) {
-    console.error('Error checking user existence:', err);
-    return false;
-  }
-};
-
-  const fetchUserProfile = async () => {
-    try {
-      const profile = await liff.getProfile();
-      const idToken = liff.getDecodedIDToken();
-      setUserProfile(profile);
-  
-      // พิมพ์ข้อมูลที่ดึงได้เพื่อตรวจสอบ
-      console.log('User Profile:', profile);
-      console.log('ID Token:', idToken);
-  
-      // ดึง email จาก idToken
-      const userEmail = idToken.email;
-      console.log('User Email:', userEmail);
-  
-      // เช็คว่ามีผู้ใช้ในระบบหรือไม่
-      const userExists = await checkUserExists(profile.userId);
-      if (!userExists) {
-        console.log('User does not exist, creating new user');
-        await storeUserProfile(profile,userEmail); // บันทึกผู้ใช้ใหม่เฉพาะเมื่อไม่พบผู้ใช้เดิม
-      }
-  
-  
-      // หลังจากนั้นดึงข้อมูลสิทธิ์ในการสุ่มจาก Random Draws Available
-      await fetchRemainingDraws(profile.userId);
-      console.log('หลังจากนั้นดึงข้อมูลสิทธิ์ในการสุ่มจาก Random Draws Available');
-      
-      // อัปเดตสถานะ isLoading หลังจากดึงข้อมูลเสร็จสิ้น
-      setIsLoading(false);
-    } catch (err) {
-      console.error('Error fetching user profile:', err);
-      // ตั้ง isLoading เป็น false ในกรณีที่เกิดข้อผิดพลาด
-      setIsLoading(false);
-    }
-  };
-  
-  
   
 
   // ฟังก์ชัน LIFF initialization
