@@ -151,38 +151,105 @@ const fetchUserProfile = async () => {
 
   
 // ฟังก์ชันสำหรับบันทึกคะแนนลงใน Data Collection "Score" และลดจำนวนสิทธิ์
+// Randomize the score and update the database
 const handleRandomize = async () => {
-  if (!isAnimating && remainingChances > 0) {
+  if (!userProfile) {
+    alert('Please log in before randomizing points');
+    return;
+  }
+
+  if (remainingChances > 0 && !isAnimating) {
     setIsAnimating(true);
-    const randomScore = getRandomScore(); // สุ่มคะแนนจากฟังก์ชัน getRandomScore
-    setScore(randomScore);
 
-    try {
-      // บันทึกคะแนนลงใน Data Collection "Score"
-      const scoreResponse = await axios.post(`${proxyUrl}/score`, {
-        line_user_id: userProfile.userId,
-        score_value: randomScore,
-        redemption_status: "pending", // ตั้งค่าเริ่มต้นเป็น pending
-        created_at: new Date(), // วันที่ที่ทำการสุ่ม
-        updated_at: new Date() // อัพเดทเวลาเมื่อทำการสุ่ม
-      });
+    let animationTime = 0;
+    const animationDuration = 3000; // แอนิเมชันจะรันเป็นเวลา 3 วินาที
+    const animationInterval = 200;  // เปลี่ยนตัวเลขทุกๆ 100 มิลลิวินาที
 
-      // ลดจำนวนสิทธิ์ที่เหลืออยู่
-      const updatedChances = remainingChances - 1;
-      setRemainingChances(updatedChances); // อัพเดทจำนวนสิทธิ์ใน UI
+    const animation = setInterval(() => {
+      const randomDigits = Math.floor(Math.random() * Math.pow(10, Math.floor(Math.random() * 5) + 1)); // สุ่มเลข 1-5 หลัก
+      setScore(randomDigits);
+      animationTime += animationInterval;
 
-      // อัพเดทจำนวนสิทธิ์ในฐานข้อมูล
-      await axios.patch(`${proxyUrl}/items/user/${userProfile.userId}`, {
-        random_draws_available: updatedChances, // ลดจำนวนสิทธิ์ที่เหลืออยู่
-      });
-
-    } catch (err) {
-      console.error('Error updating score or chances:', err);
-    } finally {
-      setIsAnimating(false); // หยุดแอนิเมชันหลังจากทำการสุ่มเสร็จสิ้น
-    }
+      if (animationTime >= animationDuration) {
+        clearInterval(animation);
+        finishRandomize(); // เมื่อครบ 2 วินาทีให้สุ่มเลขจริง
+      }
+    }, animationInterval);
+  } else if (remainingChances === 0) {
+    alert('You have used all your chances!');
   }
 };
+
+
+// ฟังก์ชันที่ใช้เมื่อสุ่มครบแล้ว
+const finishRandomize = async () => {
+  const randomScore = getRandomScore();
+  setScore(randomScore);
+
+  try {
+    // Save the score to the "Score" collection
+    await axios.post(`${proxyUrl}/score`, {
+      line_user_id: userProfile.userId,
+      score_value: randomScore,
+      redemption_status: "pending",
+      created_at: new Date(),
+      updated_at: new Date(),
+    });
+
+    // Fetch user to get their Directus user ID (not line_user_id)
+    const userResponse = await axios.get(`${proxyUrl}/items/user?filter[line_user_id][_eq]=${userProfile.userId}`);
+    const userId = userResponse.data.data[0].id;  // Use the ID from the response
+
+    // Decrement the chances
+    const updatedChances = remainingChances - 1;
+    setRemainingChances(updatedChances);
+
+    // Update the user's chances in Directus using the user ID
+    await axios.patch(`${proxyUrl}/items/user/${userId}`, {
+      random_draws_available: updatedChances,
+    });
+  } catch (err) {
+    console.error('Error updating score or chances:', err);
+  } finally {
+    setIsAnimating(false);
+  }
+};
+
+
+const fetchPendingScoresAndUpdateBonus = async (lineUserId) => {
+  try {
+    // Fetch pending scores from Directus
+    const scoreResponse = await axios.get(`${proxyUrl}/items/score?filter[line_user_id][_eq]=${lineUserId}&filter[redemption_status][_eq]=pending`);
+    const pendingScores = scoreResponse.data.data;
+    
+    if (pendingScores.length > 0) {
+      const totalPendingScore = pendingScores.reduce((sum, score) => sum + score.score_value, 0);
+
+      // Fetch user by line_user_id
+      const userResponse = await axios.get(`${proxyUrl}/items/user?filter[line_user_id][_eq]=${lineUserId}`);
+      const userId = userResponse.data.data[0].id;
+      const currentBonus = userResponse.data.data[0].total_bonus;
+
+      // Update total bonus in the user collection
+      const newTotalBonus = currentBonus + totalPendingScore;
+      await axios.patch(`${proxyUrl}/items/user/${userId}`, {
+        total_bonus: newTotalBonus
+      });
+
+      // Optionally, mark scores as claimed after updating the bonus
+      await Promise.all(pendingScores.map(async (score) => {
+        await axios.patch(`${proxyUrl}/items/score/${score.id}`, { redemption_status: "claimed" });
+      }));
+
+      setTotalBonus(newTotalBonus);  // Reflect the new total bonus in the UI
+    }
+  } catch (err) {
+    console.error('Error fetching pending scores or updating total bonus:', err);
+  }
+};
+
+
+
 
 
 // ฟังก์ชันเคลมโบนัส (Handle bonus claim)
