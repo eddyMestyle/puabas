@@ -160,7 +160,7 @@ const handleRandomize = async () => {
 
     try {
       // บันทึกคะแนนลงใน Data Collection "Score"
-      await axios.post(`${proxyUrl}/items/score`, {
+      await axios.post(`${proxyUrl}/score`, {
         line_user_id: userProfile.userId,
         score_value: randomScore,
         redemption_status: "pending", // ตั้งค่าเริ่มต้นเป็น pending
