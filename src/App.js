@@ -20,7 +20,7 @@ const NeumorphicBox = styled(Paper)(({ theme }) => ({
   textAlign: 'center',
 }));
 
-const proxyUrl = 'https://serverpuabas-1.onrender.com'; // Replace with actual proxy or ngrok URL
+const proxyUrl = 'https://21bd-49-49-62-225.ngrok-free.app'; // Replace with actual proxy or ngrok URL
 
 const getRandomScore = () => {
   const totalWeight = 911111010;
@@ -80,14 +80,18 @@ const fetchRemainingDraws = async (lineUserId) => {
     // พิมพ์ข้อมูลทั้งหมดเพื่อดูโครงสร้างก่อน
     console.log('Full Response:', response.data);
     
-    // ตรวจสอบว่ามีข้อมูลใน response.data และ response.data.data หรือไม่
-    if (response.data ) {
-      console.log('จำนวนสิทธิ์ :', response.data.remaining_draws);
-      console.log('คะแนนรวม :', response.data.total_bonus);
+    // ตรวจสอบว่ามีข้อมูลใน response.data หรือไม่
+    if (response.data) {
+      // ตรวจสอบว่ามีฟิลด์ remaining_draws และ total_bonus อยู่ใน response หรือไม่
+      const { remaining_draws, total_bonus } = response.data;
 
-      // ใช้ Random Draws Available แทน Draw Status
-            setRemainingChances(response.data.remaining_draws || 99); // ดึง Random Draws Available
-      await setTotalBonus(response.data.total_bonus ); // ดึงคะแนนสะสมทั้งหมด
+      console.log('จำนวนสิทธิ์ :', remaining_draws);
+      console.log('คะแนนรวม :', total_bonus);
+
+      // ตั้งค่า Remaining Draws และ Total Bonus ใน state
+      setRemainingChances(remaining_draws || 0); // อัปเดต Remaining Draws
+      setTotalBonus(total_bonus || 0); // อัปเดต Total Bonus
+
     } else {
       console.error('No data found for user');
     }
@@ -95,6 +99,7 @@ const fetchRemainingDraws = async (lineUserId) => {
     console.error('Error fetching draw status:', err);
   }
 };
+
 
 
 const checkUserExists = async (lineUserId) => {
@@ -150,8 +155,7 @@ const fetchUserProfile = async () => {
 };
 
   
-// ฟังก์ชันสำหรับบันทึกคะแนนลงใน Data Collection "Score" และลดจำนวนสิทธิ์
-// Randomize the score and update the database
+// ฟังก์ชัน handleRandomize สำหรับเริ่มการสุ่มคะแนน
 const handleRandomize = async () => {
   if (!userProfile) {
     alert('Please log in before randomizing points');
@@ -161,18 +165,22 @@ const handleRandomize = async () => {
   if (remainingChances > 0 && !isAnimating) {
     setIsAnimating(true);
 
+    // Fetch ข้อมูลก่อนการสุ่ม
+    await fetchRemainingDraws(userProfile.userId);  // <-- ดึงข้อมูลล่าสุดก่อนการสุ่ม
+
+    // เริ่มกระบวนการสุ่มและทำแอนิเมชัน
     let animationTime = 0;
-    const animationDuration = 3000; // แอนิเมชันจะรันเป็นเวลา 3 วินาที
-    const animationInterval = 200;  // เปลี่ยนตัวเลขทุกๆ 100 มิลลิวินาที
+    const animationDuration = 3000;
+    const animationInterval = 200;
 
     const animation = setInterval(() => {
-      const randomDigits = Math.floor(Math.random() * Math.pow(10, Math.floor(Math.random() * 5) + 1)); // สุ่มเลข 1-5 หลัก
-      setScore(randomDigits);
+      const randomNumber = Math.floor(Math.random() * 1000); // For animation
+      setScore(randomNumber);
       animationTime += animationInterval;
 
       if (animationTime >= animationDuration) {
         clearInterval(animation);
-        finishRandomize(); // เมื่อครบ 2 วินาทีให้สุ่มเลขจริง
+        finishRandomize();  // <-- หลังจากสุ่มเสร็จแล้ว
       }
     }, animationInterval);
   } else if (remainingChances === 0) {
@@ -180,40 +188,43 @@ const handleRandomize = async () => {
   }
 };
 
-
-// ฟังก์ชันที่ใช้เมื่อสุ่มครบแล้ว
+// ฟังก์ชันที่ใช้เมื่อสุ่มเสร็จสิ้น
 const finishRandomize = async () => {
-  const randomScore = getRandomScore();
+  const randomScore = getRandomScore(); // ฟังก์ชันนี้คือฟังก์ชันที่สุ่มคะแนนจริงๆ
   setScore(randomScore);
 
   try {
-    // Save the score to the "Score" collection
+    // บันทึกคะแนนลงในฐานข้อมูล
     await axios.post(`${proxyUrl}/score`, {
       line_user_id: userProfile.userId,
       score_value: randomScore,
-      redemption_status: "pending",
-      created_at: new Date(),
-      updated_at: new Date(),
+      redemption_status: "pending", // ตั้งค่าเริ่มต้นเป็น pending
+      created_at: new Date(), // วันที่ที่ทำการสุ่ม
+      updated_at: new Date() // อัพเดทเวลาเมื่อทำการสุ่ม
     });
 
-    // Fetch user to get their Directus user ID (not line_user_id)
-    const userResponse = await axios.get(`${proxyUrl}/items/user?filter[line_user_id][_eq]=${userProfile.userId}`);
-    const userId = userResponse.data.data[0].id;  // Use the ID from the response
-
-    // Decrement the chances
+    // ลดจำนวนสิทธิ์ที่เหลืออยู่
     const updatedChances = remainingChances - 1;
-    setRemainingChances(updatedChances);
+    setRemainingChances(updatedChances); // อัปเดตจำนวนสิทธิ์ใน UI
 
-    // Update the user's chances in Directus using the user ID
-    await axios.patch(`${proxyUrl}/items/user/${userId}`, {
-      random_draws_available: updatedChances,
+    // อัปเดตจำนวนสิทธิ์ในฐานข้อมูล
+    await axios.patch(`${proxyUrl}/items/user/${userProfile.userId}`, {
+      random_draws_available: updatedChances, // ลดจำนวนสิทธิ์ที่เหลืออยู่
     });
+
+    // เรียกใช้เพื่อรวมคะแนน pending และอัปเดต total_bonus ของผู้ใช้
+    await fetchPendingScoresAndUpdateBonus(userProfile.userId);
+
+    // เรียก fetch ข้อมูลใหม่เพื่ออัปเดต total_bonus และ remainingChances ใน UI
+    await fetchRemainingDraws(userProfile.userId);
+
   } catch (err) {
     console.error('Error updating score or chances:', err);
   } finally {
-    setIsAnimating(false);
+    setIsAnimating(false); // หยุดแอนิเมชันหลังจากทำการสุ่มเสร็จสิ้น
   }
 };
+
 
 
 const fetchPendingScoresAndUpdateBonus = async (lineUserId) => {
@@ -236,7 +247,7 @@ const fetchPendingScoresAndUpdateBonus = async (lineUserId) => {
         total_bonus: newTotalBonus
       });
 
-      // Optionally, mark scores as claimed after updating the bonus
+      // Mark scores as claimed after updating the bonus
       await Promise.all(pendingScores.map(async (score) => {
         await axios.patch(`${proxyUrl}/items/score/${score.id}`, { redemption_status: "claimed" });
       }));
@@ -247,8 +258,6 @@ const fetchPendingScoresAndUpdateBonus = async (lineUserId) => {
     console.error('Error fetching pending scores or updating total bonus:', err);
   }
 };
-
-
 
 
 
